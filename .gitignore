@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Generated output files
+list.f
+lib.f
+*.f
+report*.txt
+report*.json
+report*.md
+
+# Output directories
+output*/
+isolated_design/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs (keep test_example directory but ignore generated files in it)
+test_results/

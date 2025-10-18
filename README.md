@@ -6,6 +6,7 @@ A Python tool that analyzes SystemVerilog files to extract module instances and 
 
 - 🔍 **Automatic Module Discovery**: Scans SystemVerilog files and builds dependency trees
 - 📦 **Library Support**: Separates library modules into dedicated filelists
+- 📤 **Library Extraction**: Copies referenced library sources into a clean directory when needed
 - 📝 **Include File Handling**: Properly handles `.svh` headers and SystemVerilog packages
 - 🏷️ **Prefix Support**: Renames library modules with custom prefixes to avoid naming conflicts
 - 📊 **Report Generation**: Creates detailed reports in text, JSON, or Markdown format
@@ -58,6 +59,24 @@ Rename library modules and update all instances:
 ./sv_instance_extractor.py -i top.sv -idir ./rtl -lib ./ip_library --prefix=IP -o ./output
 ```
 
+## Examples
+
+Curated scripts under `examples/` demonstrate common workflows:
+
+- `examples/run_basic.sh` – generate `list.f`/`lib.f` in place.
+- `examples/run_with_prefix.sh` – apply `--prefix` and inspect the rewritten RTL.
+- `examples/run_export_lib.sh` – copy referenced library sources into a clean directory.
+- `examples/run_programmatic.py` – invoke `InstanceExtractor` directly from Python and emit a report.
+
+Run them from the repository root, for example:
+
+```bash
+bash examples/run_basic.sh
+python3 examples/run_programmatic.py
+```
+
+Each script writes artefacts beneath `examples/output/`; rerun as needed after inspecting the results.
+
 ## Command Line Options
 
 ### Required Options
@@ -79,6 +98,7 @@ Rename library modules and update all instances:
 | Option | Description |
 |--------|-------------|
 | `-o`, `--output <dir>` | Output directory (default: current directory, or `./output_rtl` with `--prefix`) |
+| `--gen-lib <dir>` | Copy referenced library modules into `<dir>` and emit a `lib.f` there |
 | `--prefix <string>` | Add prefix to library module names (requires `-o` or uses `./output_rtl`) |
 
 ### Report Options
@@ -132,7 +152,27 @@ test_example/lib/adder.sv
 test_example/lib/fifo.sv
 ```
 
-### Example 3: With Include Files
+### Example 3: Export Referenced Libraries
+
+```bash
+./sv_instance_extractor.py -i test_example/rtl/top.sv \
+    -idir test_example/rtl \
+    -lib test_example/lib \
+    --gen-lib ./extracted_lib
+```
+
+**Result**:
+```
+list.f
+extracted_lib/
+  ├── adder.sv
+  ├── fifo.sv
+  └── lib.f
+```
+
+`list.f` now references `extracted_lib/lib.f`, and the copied sources keep only the modules actually used by the design.
+
+### Example 4: With Include Files
 
 ```bash
 ./sv_instance_extractor.py -i test_example/rtl/top.sv \
@@ -158,7 +198,7 @@ test_example/packages/common_pkg.sv
 -f lib.f
 ```
 
-### Example 4: Module Isolation with Prefix
+### Example 5: Module Isolation with Prefix
 
 ```bash
 ./sv_instance_extractor.py -i test_example/rtl/top.sv \
@@ -191,7 +231,7 @@ IP_adder #(.WIDTH(32)) u_adder (
 );
 ```
 
-### Example 5: Generate JSON Report
+### Example 6: Generate JSON Report
 
 ```bash
 ./sv_instance_extractor.py -i test_example/rtl/top.sv \
@@ -213,7 +253,7 @@ IP_adder #(.WIDTH(32)) u_adder (
   3. RTL module files
   4. Reference to `lib.f` (if library modules exist)
 
-- **`lib.f`**: Library filelist containing library module files
+- **`lib.f`**: Library filelist containing library module files (placed under `--gen-lib` when that option is used)
 
 ### Report Format
 
@@ -265,6 +305,28 @@ Run the test:
     --include test_example/include \
     --include test_example/packages
 ```
+
+## Testing
+
+### Unit Tests
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements-dev.txt
+pytest
+deactivate
+```
+
+`pytest` exercises parser utilities and the extractor workflow using temporary directories. A virtual environment keeps development dependencies isolated from the system Python installation.
+
+### Integration Suite
+
+```bash
+./run_tests.sh
+```
+
+The shell suite validates full CLI scenarios, including report generation and error handling.
 
 ## Requirements
 

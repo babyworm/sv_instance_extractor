@@ -277,11 +277,14 @@ echo ""
 # TEST 9: Error handling - missing input file
 # ============================================================================
 print_test "9" "Error Handling - Missing Input File"
+set +e
 python3 sv_instance_extractor.py \
     -i nonexistent.sv \
     -idir test_example/rtl \
     > test_results/test9_output.txt 2>&1
-if [ $? -ne 0 ]; then
+EXIT_CODE=$?
+set -e
+if [ $EXIT_CODE -ne 0 ]; then
     echo -e "${GREEN}✓ Correctly failed for missing file${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else

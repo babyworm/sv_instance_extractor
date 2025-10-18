@@ -113,8 +113,12 @@ class SVParser:
     @staticmethod
     def replace_module_name(content: str, old_name: str, new_name: str) -> str:
         """Replace module name in module definition"""
-        pattern = re.compile(r'\bmodule\s+' + re.escape(old_name) + r'\b')
-        return pattern.sub(f'module {new_name}', content)
+        module_pattern = re.compile(r'(\bmodule\s+)' + re.escape(old_name) + r'(\b)')
+        endmodule_pattern = re.compile(r'(endmodule\s*:?\s*)' + re.escape(old_name) + r'\b')
+
+        content = module_pattern.sub(r'\1' + new_name + r'\2', content)
+        content = endmodule_pattern.sub(lambda m: m.group(1) + new_name, content)
+        return content
 
     @staticmethod
     def replace_instance_type(content: str, old_type: str, new_type: str) -> Tuple[str, List[int]]:
@@ -331,10 +335,13 @@ class InstanceExtractor:
     def _generate_filelists(self):
         """Generate filelists without prefix"""
         output_dir = Path(self.args.output) if self.args.output else Path.cwd()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate main list.f
         list_file = output_dir / 'list.f'
-        lib_file = output_dir / 'lib.f'
+        lib_dir = Path(self.args.gen_lib) if self.args.gen_lib else output_dir
+        lib_dir.mkdir(parents=True, exist_ok=True)
+        lib_file = lib_dir / 'lib.f'
 
         with open(list_file, 'w', encoding='utf-8') as f:
             # Write packages first
@@ -365,24 +372,42 @@ class InstanceExtractor:
                     else:
                         rtl_files.append(mod_info.file_path)
 
+            unique_lib_files = sorted(set(lib_files))
+            lib_dest_map = {}
+
+            if unique_lib_files:
+                if self.args.gen_lib:
+                    for lib_file_path in unique_lib_files:
+                        dest_path = self._copy_library_to_dir(Path(lib_file_path))
+                        lib_dest_map[lib_file_path] = dest_path
+                else:
+                    for lib_file_path in unique_lib_files:
+                        lib_dest_map[lib_file_path] = lib_file_path
+
             if rtl_files:
                 f.write("// RTL Files\n")
                 for rtl_file in sorted(set(rtl_files)):
                     f.write(f"{rtl_file}\n")
 
             # Reference to library file if exists
-            if lib_files:
+            if unique_lib_files:
                 f.write("\n// Library Files\n")
-                f.write("-f lib.f\n")
+                try:
+                    lib_reference = Path(os.path.relpath(lib_file, output_dir))
+                except ValueError:
+                    lib_reference = lib_file
+                f.write(f"-f {lib_reference}\n")
 
         self.report.generated_files.append(list_file)
 
         # Generate lib.f if there are library modules
-        if lib_files:
+        if unique_lib_files:
             with open(lib_file, 'w', encoding='utf-8') as f:
                 f.write("// Library Files\n")
-                for lib_file_path in sorted(set(lib_files)):
-                    f.write(f"{lib_file_path}\n")
+                for lib_file_path in unique_lib_files:
+                    entry_path = lib_dest_map[lib_file_path]
+                    entry = Path(entry_path).name if self.args.gen_lib else entry_path
+                    f.write(f"{entry}\n")
             self.report.generated_files.append(lib_file)
 
         # Update statistics
@@ -393,12 +418,23 @@ class InstanceExtractor:
                                           if m in self.modules and self.modules[m].is_library])
         self.report.total_modules = len(self.visited_modules)
 
+    def _copy_library_to_dir(self, lib_file_path: Path) -> Path:
+        """Copy a library file to the --gen-lib directory"""
+        if not self.args.gen_lib:
+            return lib_file_path
+
+        destination_dir = Path(self.args.gen_lib)
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / lib_file_path.name
+        shutil.copy2(lib_file_path, destination)
+        return destination
+
     def _apply_prefix_and_copy(self):
         """Apply prefix to library modules and copy files"""
         output_dir = Path(self.args.output) if self.args.output else Path('./output_rtl')
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        lib_dir = output_dir / 'lib'
+        lib_dir = Path(self.args.gen_lib) if self.args.gen_lib else output_dir / 'lib'
         lib_dir.mkdir(parents=True, exist_ok=True)
 
         prefix = self.args.prefix
@@ -561,7 +597,11 @@ class InstanceExtractor:
 
             # Reference to library file
             f.write("\n// Library Files\n")
-            f.write(f"-f {lib_file}\n")
+            try:
+                lib_reference = Path(os.path.relpath(lib_file, output_dir))
+            except ValueError:
+                lib_reference = lib_file
+            f.write(f"-f {lib_reference}\n")
 
         self.report.generated_files.append(list_file)
 
